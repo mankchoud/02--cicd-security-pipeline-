@@ -1,0 +1,90 @@
+###############################################################################
+# checkov.yaml — Checkov IaC Policy Configuration
+#
+# Controls which checks run and which are intentionally skipped.
+# A check is skipped ONLY when:
+#   a) The resource does not exist in the free-tier build (e.g. no RDS), OR
+#   b) The check conflicts with a deliberate free-tier substitution, OR
+#   c) An exception has been approved (see policies/exceptions/)
+#
+# Every skip entry has:
+#   - The reason it is skipped in this build
+#   - What the production behaviour should be
+###############################################################################
+
+directory:
+  - "."
+
+include:
+  - "*.tf"
+  - "*.tfvars"
+
+download-external-modules: false
+
+###############################################################################
+# SKIPPED CHECKS
+###############################################################################
+skip-check:
+
+  # CKV_AWS_8 / CKV_AWS_79: EC2 should require IMDSv2
+  # REASON: NAT and Nginx user_data scripts call instance metadata using
+  #         IMDSv1 token-less requests. Updating to IMDSv2 requires
+  #         token-based curl calls in user_data.
+  # PRODUCTION FIX: Add metadata_options { http_tokens = "required" }
+  #                 to all aws_instance resources and update user_data
+  #                 scripts to use IMDSv2 token headers.
+  - CKV_AWS_8
+  - CKV_AWS_79
+
+  # CKV_AWS_135: EC2 EBS volumes should be encrypted
+  # REASON: Free-tier learning build — encrypting root volumes adds
+  #         KMS key costs (~$1/mo per key).
+  # PRODUCTION FIX: Add encrypted = true and kms_key_id to all
+  #                 aws_instance root_block_device blocks.
+  - CKV_AWS_135
+
+  # CKV_AWS_18: S3 access logging should be enabled on the flow logs bucket
+  # REASON: Enabling access logging on the flow logs bucket would require
+  #         a second logging bucket — recursive logging setup adds complexity
+  #         and cost for a learning build.
+  # PRODUCTION FIX: Create a separate audit-logs S3 bucket and point
+  #                 logging_config at it.
+  - CKV_AWS_18
+
+  # CKV_AWS_21: S3 versioning should be enabled on the flow logs bucket
+  # REASON: Versioning on a high-volume log bucket multiplies storage cost.
+  # PRODUCTION FIX: Enable versioning with a lifecycle rule that expires
+  #                 non-current versions after 30 days.
+  - CKV_AWS_21
+
+  # CKV_AWS_144: S3 cross-region replication
+  # REASON: Not required for a learning project.
+  # PRODUCTION FIX: Enable for compliance-critical log data.
+  - CKV_AWS_144
+
+  # CKV_AWS_145: S3 KMS CMK encryption
+  # REASON: We use SSE-S3 (AES256) which is free. KMS CMK = ~$1/mo + API costs.
+  # PRODUCTION FIX: Use aws_kms_key and reference it in
+  #                 server_side_encryption_configuration.
+  - CKV_AWS_145
+
+  # CKV2_AWS_62: S3 event notifications
+  # REASON: Not required for a learning build.
+  - CKV2_AWS_62
+
+  # CKV2_AWS_5: Security group not attached to a resource
+  # REASON: db-sg exists to demonstrate the design but no RDS instance
+  #         is created (RDS costs money). This is a deliberate free-tier
+  #         trade-off.
+  # PRODUCTION FIX: Remove this skip when the RDS instance is added.
+  - CKV2_AWS_5
+
+# Only fail the pipeline on MEDIUM and above — LOW/INFO are warnings
+check:
+  - HIGH
+  - CRITICAL
+  - MEDIUM
+
+output: cli
+compact: true
+show-skipped: true

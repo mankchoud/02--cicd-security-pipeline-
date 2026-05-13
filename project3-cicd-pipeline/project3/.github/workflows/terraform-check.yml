@@ -1,0 +1,145 @@
+###############################################################################
+# terraform-check.yml — IaC-Specific Security Checks
+#
+# Triggers only when Terraform files change.
+# Gives IaC developers fast, targeted feedback without running
+# the full security-scan.yml pipeline.
+#
+# FREE-TIER: All tools are open source. No cloud service costs.
+#
+# PRODUCTION EQUIVALENT:
+#   - Terraform Cloud run tasks with policy enforcement
+#   - tfsec in CI + Sentinel policies in Terraform Enterprise
+#   - AWS Config rules for post-deployment drift detection
+###############################################################################
+
+name: Terraform Security Check
+
+on:
+  push:
+    paths:
+      - "**.tf"
+      - "**.tfvars"
+  pull_request:
+    paths:
+      - "**.tf"
+      - "**.tfvars"
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+
+  ###############################################################################
+  # Checkov — comprehensive IaC policy scanner
+  # Runs the same config as security-scan.yml but triggered independently
+  # so Terraform-only PRs get instant feedback.
+  ###############################################################################
+  checkov:
+    name: "Checkov IaC Scan"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform
+          config_file: policies/checkov-config/checkov.yaml
+          output_format: sarif
+          output_file_path: checkov.sarif
+          soft_fail: false
+        # Key checks this runs against the Project 2 Terraform:
+        # CKV_AWS_130  VPC default security group is closed
+        # CKV_AWS_24   VPC flow logs enabled
+        # CKV2_AWS_12  Default SG blocks all traffic
+        # CKV_AWS_19   S3 bucket has server-side encryption
+        # CKV_AWS_53   S3 bucket public access blocked
+        # CKV_AWS_92   S3 lifecycle configuration present
+        # See policies/checkov-config/checkov.yaml for the skip list
+        # with documented reasons for every intentional deviation.
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov.sarif
+
+  ###############################################################################
+  # tfsec — second-opinion IaC scanner (Aqua Security, open source)
+  # Runs alongside Checkov — different rule sets catch different things.
+  #
+  # PRODUCTION EQUIVALENT: tfsec in pre-commit + CI (same tool, same cost)
+  ###############################################################################
+  tfsec:
+    name: "tfsec Scan"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          soft_fail: false
+          format: sarif
+          sarif_file: tfsec.sarif
+          config_file: policies/checkov-config/tfsec.yaml
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: tfsec.sarif
+
+  ###############################################################################
+  # Terraform Format Check
+  # Ensures all .tf files are consistently formatted.
+  # Not a security check — but poorly formatted code is harder to review
+  # and security issues hide in hard-to-read code.
+  ###############################################################################
+  terraform-fmt:
+    name: "Terraform Format Check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.6"
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+        # Fails if any .tf file is not properly formatted.
+        # Fix locally with: terraform fmt -recursive
+
+  ###############################################################################
+  # Terraform Validate
+  # Checks syntax and internal consistency without connecting to AWS.
+  # Catches type errors, missing required arguments, and invalid references.
+  ###############################################################################
+  terraform-validate:
+    name: "Terraform Validate"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.6"
+
+      - name: Terraform Init (no backend — no AWS credentials needed)
+        run: terraform init -backend=false
+        # -backend=false skips state backend init so no AWS creds are needed
+        # in CI. Validation works entirely locally.
+
+      - name: Terraform Validate
+        run: terraform validate

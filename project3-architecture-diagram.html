@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Project 3 — CI/CD Security Pipeline Architecture</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f6f8fa; padding: 28px; color: #1a1915; }
+h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.subtitle { font-size: 12px; color: #666; margin-bottom: 24px; }
+
+/* ── layout ── */
+.page { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+
+/* ── generic card ── */
+.card { background: white; border-radius: 10px; border: 1.5px solid #e0e0e0; padding: 14px 18px; }
+.card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; }
+
+/* ── colour themes ── */
+.t-blue   { border-color: #3B5BDB; background: #f0f4ff; }
+.t-green  { border-color: #1a7f37; background: #f0fff4; }
+.t-orange { border-color: #e36209; background: #fff8f0; }
+.t-purple { border-color: #6e40c9; background: #f8f0ff; }
+.t-red    { border-color: #cf222e; background: #fff0f0; }
+.t-gray   { border-color: #999;    background: #f6f8fa; }
+.t-teal   { border-color: #0969da; background: #ddf4ff; }
+
+/* ── row / col helpers ── */
+.row { display: flex; gap: 10px; align-items: stretch; }
+.col { flex: 1; }
+
+/* ── arrow ── */
+.arrow-right { display: flex; align-items: center; color: #888; font-size: 20px; padding: 0 4px; flex-shrink: 0; }
+.arrow-down  { text-align: center; color: #888; font-size: 13px; padding: 4px 0; }
+
+/* ── badge ── */
+.badge { display: inline-block; font-size: 9px; font-weight: 700; border-radius: 4px; padding: 2px 7px; margin-top: 4px; }
+.badge-block { background: #cf222e; color: #fff; }
+.badge-warn  { background: #e36209; color: #fff; }
+.badge-pass  { background: #1a7f37; color: #fff; }
+.badge-skip  { background: #888;    color: #fff; }
+
+/* ── box ── */
+.box { border-radius: 8px; border: 1.5px solid; padding: 10px 14px; }
+.box-title { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+.box-sub   { font-size: 10.5px; color: #444; line-height: 1.55; }
+.box-note  { font-size: 10px; color: #0F6E56; margin-top: 4px; font-style: italic; }
+
+/* ── section wrapper ── */
+.section { border: 1.5px dashed; border-radius: 10px; padding: 14px; }
+.section-label { font-size: 10px; font-weight: 700; margin-bottom: 10px; }
+
+/* ── gate ── */
+.gate { text-align: center; border: 2px solid #666; border-radius: 10px; padding: 12px 20px; background: #f6f8fa; }
+.gate h3 { font-size: 14px; margin-bottom: 3px; }
+.gate p  { font-size: 10.5px; color: #666; }
+
+/* ── outcome ── */
+.outcome { border-radius: 8px; border: 1.5px solid; padding: 14px; flex: 1; text-align: center; }
+.outcome-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.outcome p { font-size: 10.5px; }
+
+/* ── table ── */
+table { border-collapse: collapse; width: 100%; font-size: 11px; }
+th { background: #f0f4ff; padding: 6px 10px; text-align: left; border: 1px solid #ddd; font-weight: 600; }
+td { padding: 6px 10px; border: 1px solid #ddd; }
+.saving { color: #0F6E56; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div>
+    <h1>Project 3 — CI/CD Security Pipeline (Free-Tier)</h1>
+    <p class="subtitle">100% GitHub Actions &nbsp;·&nbsp; $0 cost &nbsp;·&nbsp; All tools open source &nbsp;·&nbsp; No AWS CodePipeline / CodeBuild / ECR / Inspector costs</p>
+  </div>
+
+  <!-- ══ ROW 1: Developer → Pre-commit → GitHub ══ -->
+  <div class="row" style="align-items:center">
+
+    <div class="box t-blue col" style="max-width:140px; text-align:center">
+      <div class="box-title" style="color:#1e2d6e">👨‍💻 Developer</div>
+      <div class="box-sub">git commit<br>local laptop</div>
+    </div>
+
+    <div class="arrow-right">→</div>
+
+    <div class="box t-blue col">
+      <div class="box-title" style="color:#1e2d6e">Pre-Commit Hook &nbsp;·&nbsp; <code style="font-size:10px">scripts/pre-commit-hook.sh</code></div>
+      <div class="box-sub">
+        <b>Check 1:</b> Gitleaks — staged files only (fast, before push)<br>
+        <b>Check 2:</b> terraform fmt — auto-fixes and re-stages .tf files<br>
+        <b>Check 3:</b> File size &gt; 5MB blocker
+      </div>
+      <span class="badge badge-block">Secret → BLOCK commit</span>
+    </div>
+
+    <div class="arrow-right">→</div>
+
+    <div class="box t-green col" style="max-width:120px; text-align:center">
+      <div class="box-title" style="color:#116329">GitHub</div>
+      <div class="box-sub">push / PR<br>triggers CI</div>
+    </div>
+
+  </div>
+
+  <!-- ══ GITHUB ACTIONS WRAPPER ══ -->
+  <div class="section" style="border-color:#1a7f37">
+    <div class="section-label" style="color:#1a7f37">🟢 GITHUB ACTIONS &nbsp;·&nbsp; Free tier: 2,000 min/mo private · unlimited public · $0</div>
+
+    <!-- security-scan.yml -->
+    <div class="section" style="border-color:#0969da; margin-bottom:10px">
+      <div class="section-label" style="color:#0969da">📄 security-scan.yml &nbsp;·&nbsp; on: [push, pull_request] → main, develop</div>
+
+      <!-- Trigger -->
+      <div class="arrow-down">↓ push or PR received</div>
+
+      <!-- Step 2: Secrets -->
+      <div style="display:flex; justify-content:center; margin-bottom:8px">
+        <div class="box t-orange" style="width:520px">
+          <div class="box-title" style="color:#6e3300">Step 2 — Secret Scanning</div>
+          <div class="box-sub">
+            Tool: <b>Gitleaks OSS</b> &nbsp;·&nbsp; Full git history scan on every push and PR<br>
+            Detects: AWS keys · GitHub tokens · private keys · passwords · API keys · JWTs
+          </div>
+          <div class="box-note">★ replaces: GitHub Advanced Security (~$19/user/mo) · truffleHog</div>
+          <span class="badge badge-block">Any secret found → BLOCK PR</span>
+        </div>
+      </div>
+
+      <div class="arrow-down">↓ needs: secret-scan &nbsp;(Steps 3–5 only run if no secrets found)</div>
+
+      <!-- Steps 3, 4, 5 parallel -->
+      <div class="row" style="margin-bottom:8px">
+
+        <div class="box col" style="border-color:#6e40c9; background:#f8f0ff">
+          <div class="box-title" style="color:#3d1f8a">Step 3 — SAST</div>
+          <div class="box-sub">
+            Tool: <b>Semgrep OSS</b><br>
+            · p/security-audit (OWASP Top 10)<br>
+            · p/python · p/javascript<br>
+            · p/terraform (scans Project 2)<br>
+            · p/secrets (second layer)<br>
+            SARIF → Security tab, inline on PR
+          </div>
+          <div class="box-note">★ replaces: SonarQube / GitHub CodeQL (GHAS)</div>
+          <span class="badge badge-block">ERROR → block</span>
+          <span class="badge badge-warn" style="margin-left:4px">WARN → continue</span>
+        </div>
+
+        <div class="box col t-teal">
+          <div class="box-title" style="color:#0550ae">Step 4 — Dependencies</div>
+          <div class="box-sub">
+            Tools: <b>pip-audit + npm audit</b><br>
+            · Queries PyPA Advisory DB + OSV<br>
+            · requirements.txt (Python)<br>
+            · package.json (Node.js)<br>
+            · scan-results-parser.sh<br>
+            &nbsp;
+          </div>
+          <div class="box-note">★ replaces: Snyk team tier (~$25/user/mo)</div>
+          <span class="badge badge-block">CRITICAL no-fix → block</span>
+          <span class="badge badge-warn" style="margin-left:4px">HIGH w/fix → warn</span>
+        </div>
+
+        <div class="box col t-green">
+          <div class="box-title" style="color:#116329">Step 5 — IaC Scan</div>
+          <div class="box-sub">
+            Tool: <b>Checkov OSS</b><br>
+            · Scans all Project 2 Terraform<br>
+            · checkov.yaml skip list<br>
+            · Skips documented with reasons<br>
+            · SARIF → Security tab<br>
+            &nbsp;
+          </div>
+          <div class="box-note">★ replaces: Checkov Cloud / Sentinel (paid)</div>
+          <span class="badge badge-block">MEDIUM+ fail → block</span>
+        </div>
+
+      </div>
+
+      <!-- SARIF line -->
+      <div class="card" style="background:#e6ffed; border-color:#1a7f37; text-align:center; padding:8px">
+        <span style="font-size:10.5px; color:#116329">SARIF from Steps 3 + 5 → GitHub Security → Code scanning tab → findings shown inline on PR diff</span>
+      </div>
+
+      <div class="arrow-down">↓</div>
+
+      <!-- Summary -->
+      <div style="display:flex; justify-content:center">
+        <div class="box t-blue" style="width:520px; text-align:center">
+          <div class="box-title" style="color:#1e2d6e">Security Summary &nbsp;(if: always())</div>
+          <div class="box-sub">Posts ✅/❌ table to Actions Summary and PR comment<br>
+          Prod equivalent: AWS Security Hub · Slack #security-alerts · Jira ticket</div>
+        </div>
+      </div>
+
+    </div><!-- end security-scan.yml -->
+
+    <!-- terraform-check.yml -->
+    <div class="section" style="border-color:#1a7f37; margin-bottom:10px">
+      <div class="section-label" style="color:#1a7f37">📄 terraform-check.yml &nbsp;·&nbsp; triggers only when **.tf / **.tfvars files change</div>
+      <div class="row">
+        <div class="box col t-green">
+          <div class="box-title" style="color:#116329">Checkov (full scan)</div>
+          <div class="box-sub">IaC policy check<br>SARIF upload<br>checkov.yaml config</div>
+        </div>
+        <div class="box col t-green">
+          <div class="box-title" style="color:#116329">tfsec (2nd opinion)</div>
+          <div class="box-sub">Different rule set<br>catches what Checkov misses<br>tfsec.yaml config</div>
+        </div>
+        <div class="box col t-blue">
+          <div class="box-title" style="color:#1e2d6e">terraform fmt -check</div>
+          <div class="box-sub">Formatting validation<br>auto-fix locally:<br>terraform fmt -recursive</div>
+        </div>
+        <div class="box col t-blue">
+          <div class="box-title" style="color:#1e2d6e">terraform validate</div>
+          <div class="box-sub">Syntax + type check<br>-backend=false<br>no AWS creds needed</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- container-scan.yml -->
+    <div class="section" style="border-color:#e36209">
+      <div class="section-label" style="color:#e36209">📄 container-scan.yml &nbsp;·&nbsp; triggers when Dockerfile changes or push to main</div>
+      <div class="row">
+        <div class="box col t-orange">
+          <div class="box-title" style="color:#6e3300">Build image (local runner only)</div>
+          <div class="box-sub">docker build -t scan-target:SHA .<br>
+          <b>Never pushed to ECR</b><br>
+          Image discarded after job ends</div>
+          <div class="box-note">$0 ECR storage · $0 ECR scan cost</div>
+        </div>
+        <div class="box col t-orange">
+          <div class="box-title" style="color:#6e3300">Trivy — CVE scan</div>
+          <div class="box-sub">OS packages (Alpine/Ubuntu/Amazon Linux)<br>
+          App dependencies (pip/npm/gem)<br>
+          ignore-unfixed: true</div>
+          <div class="box-note">★ replaces: ECR scanning ($0.09/image) · Inspector</div>
+          <span class="badge badge-block">CRITICAL/HIGH → block</span>
+        </div>
+        <div class="box col t-orange">
+          <div class="box-title" style="color:#6e3300">Trivy — config scan</div>
+          <div class="box-sub">Dockerfile misconfigurations:<br>
+          · Root USER instruction<br>
+          · sudo usage in container<br>
+          · No HEALTHCHECK</div>
+          <span class="badge badge-block">Root USER → block</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end GitHub Actions -->
+
+  <!-- ══ GATE ══ -->
+  <div class="arrow-down">↓</div>
+  <div style="display:flex; justify-content:center">
+    <div class="gate" style="width:340px">
+      <h3>All Checks Pass?</h3>
+      <p>Gate evaluated after all workflow jobs complete</p>
+    </div>
+  </div>
+
+  <!-- ══ PASS / FAIL ══ -->
+  <div class="row">
+    <div class="outcome" style="border-color:#1a7f37; background:#f0fff4">
+      <div class="outcome-title">✅ YES — Merge Allowed</div>
+      <p>PR can be merged<br>Continue to build &amp; deploy<br><em>(future: staging deploy stage)</em></p>
+    </div>
+
+    <div class="outcome t-gray" style="text-align:center">
+      <div class="outcome-title" style="font-size:12px">Exception Path</div>
+      <p>Fix code<br>— or —<br>False positive? suppress + exception file<br><code style="font-size:9px">policies/exceptions/TEMPLATE.md</code><br>→ re-push</p>
+    </div>
+
+    <div class="outcome t-red">
+      <div class="outcome-title">❌ NO — PR Blocked</div>
+      <p>Findings in Security tab<br>Shown inline on PR diff<br><code style="font-size:9px">docs/escalation-process.md</code></p>
+    </div>
+  </div>
+
+  <!-- ══ SUBSTITUTION TABLE ══ -->
+  <div class="card">
+    <div class="card-title">Free-Tier Substitution Summary</div>
+    <table>
+      <tr>
+        <th>Original Production Tool</th>
+        <th>Free-Tier Substitute</th>
+        <th>Why Substituted</th>
+        <th>Cost Saved</th>
+      </tr>
+      <tr><td>GitHub Advanced Security</td><td>Gitleaks + Semgrep OSS + Actions</td><td>GHAS is a paid add-on</td><td class="saving">~$19/user/mo</td></tr>
+      <tr><td>SonarQube Cloud</td><td>Semgrep OSS</td><td>SonarQube paid for teams</td><td class="saving">~$15/mo+</td></tr>
+      <tr><td>Snyk (team tier)</td><td>pip-audit + npm audit</td><td>Snyk free tier rate-limited</td><td class="saving">~$25/user/mo</td></tr>
+      <tr><td>AWS ECR enhanced scanning</td><td>Trivy (local, never pushed)</td><td>ECR scan charged per image</td><td class="saving">~$0.09/image</td></tr>
+      <tr><td>Amazon Inspector</td><td>Trivy (local in runner)</td><td>Inspector per-instance hourly cost</td><td class="saving">~$0.002/hr</td></tr>
+      <tr><td>AWS CodePipeline</td><td>GitHub Actions workflows</td><td>CodePipeline per-pipeline charge</td><td class="saving">~$1/pipeline/mo</td></tr>
+      <tr><td>AWS CodeBuild</td><td>GitHub-hosted runners</td><td>CodeBuild per build-minute charge</td><td class="saving">$0.005/build-min</td></tr>
+      <tr style="font-weight:700; background:#f0fff4">
+        <td colspan="3">Total monthly cost</td>
+        <td class="saving">$0</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- ══ FILE MAP ══ -->
+  <div class="card">
+    <div class="card-title">Project File Map</div>
+    <table>
+      <tr><th>File</th><th>Purpose</th></tr>
+      <tr><td><code>.github/workflows/security-scan.yml</code></td><td>Main pipeline: secrets (Gitleaks), SAST (Semgrep), deps (pip-audit/npm), IaC (Checkov), summary</td></tr>
+      <tr><td><code>.github/workflows/terraform-check.yml</code></td><td>IaC-specific: Checkov, tfsec, terraform fmt, terraform validate — triggers on .tf changes only</td></tr>
+      <tr><td><code>.github/workflows/container-scan.yml</code></td><td>Container: Trivy CVE scan + Dockerfile config scan — image built locally, never pushed</td></tr>
+      <tr><td><code>policies/checkov-config/checkov.yaml</code></td><td>Checkov skip list — every skip has documented reason + production fix</td></tr>
+      <tr><td><code>policies/checkov-config/tfsec.yaml</code></td><td>tfsec exclude list for deliberate free-tier deviations</td></tr>
+      <tr><td><code>policies/semgrep-rules/no-hardcoded-credentials.yaml</code></td><td>Custom Semgrep SAST rules (AWS key patterns, SQLi, shell injection, Flask debug)</td></tr>
+      <tr><td><code>policies/exceptions/adding-exceptions.md</code></td><td>How to request exceptions + the exception register</td></tr>
+      <tr><td><code>policies/exceptions/TEMPLATE.md</code></td><td>Exception file template (5 min to fill in)</td></tr>
+      <tr><td><code>scripts/pre-commit-hook.sh</code></td><td>Local hook: Gitleaks (staged only) + terraform fmt + file size check</td></tr>
+      <tr><td><code>scripts/scan-results-parser.sh</code></td><td>Parses pip-audit JSON — exits 1 on CRITICAL CVE with no fix</td></tr>
+      <tr><td><code>docs/tool-configuration.md</code></td><td>How each tool is configured, tuned, and what the production upgrade looks like</td></tr>
+      <tr><td><code>docs/escalation-process.md</code></td><td>Step-by-step: what to do when a check blocks your PR</td></tr>
+    </table>
+  </div>
+
+</div><!-- end page -->
+</body>
+</html>

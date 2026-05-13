@@ -1,0 +1,97 @@
+###############################################################################
+# container-scan.yml — Container Image Scanning
+#
+# Triggers when a Dockerfile changes, or on push to main.
+#
+# FREE-TIER SUBSTITUTION:
+#   ORIGINAL: AWS ECR scanning (charged per image scan ~$0.09/image)
+#   ORIGINAL: AWS Inspector for containers (~$0.002/instance/hour)
+#   FREE:     Trivy running inside GitHub Actions runner (open source, $0)
+#
+#   The image is built locally inside the runner — it is NEVER pushed to
+#   ECR. This means zero ECR storage costs and zero ECR scan costs.
+#   The image exists only in ephemeral runner disk space and is discarded
+#   when the job ends.
+#
+# PRODUCTION COMPLEMENT:
+#   In production you would run both:
+#   1. Trivy in CI (catches issues before the image is pushed) — this file
+#   2. ECR enhanced scanning after push (catches new CVEs in already-deployed images)
+#   3. Amazon Inspector for runtime container threat detection
+###############################################################################
+
+name: Container Scan
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "Dockerfile"
+      - "Dockerfile.*"
+      - "docker-compose*.yml"
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "Dockerfile.*"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  trivy-scan:
+    name: "Container Scan (Trivy OSS)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build image for scanning (never pushed to any registry)
+        run: |
+          if [ -f Dockerfile ]; then
+            docker build -t scan-target:${{ github.sha }} .
+            echo "IMAGE_BUILT=true" >> $GITHUB_ENV
+          else
+            echo "No Dockerfile found - skipping container scan"
+            echo "IMAGE_BUILT=false" >> $GITHUB_ENV
+          fi
+        # FREE-TIER NOTE: We never run "docker push" so we never pay for
+        # ECR storage or ECR scanning. Trivy scans the local image directly.
+        # PRODUCTION: After Trivy passes, push to ECR, then ECR enhanced
+        # scanning catches new CVEs that appear after the initial push.
+
+      - name: Trivy - OS and app vulnerability scan
+        if: env.IMAGE_BUILT == 'true'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "scan-target:${{ github.sha }}"
+          format: "sarif"
+          output: "trivy-vuln-results.sarif"
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"  # Only block on CRITICAL and HIGH
+          ignore-unfixed: true        # Skip CVEs with no available patch
+        # PRODUCTION EQUIVALENT: aws ecr start-image-scan + Amazon Inspector
+        # Those catch new CVEs discovered after deployment; this catches them
+        # at build time before the image ever reaches a registry.
+
+      - name: Upload Trivy vulnerability SARIF
+        if: always() && env.IMAGE_BUILT == 'true'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-vuln-results.sarif
+
+      - name: Trivy - Dockerfile misconfiguration scan
+        if: hashFiles('Dockerfile') != ''
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "config"
+          scan-ref: "."
+          format: "table"
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
+        # Key Dockerfile checks:
+        # DS001  Last USER instruction is root          -> BLOCK
+        # DS002  sudo used inside container             -> BLOCK
+        # DS026  No HEALTHCHECK instruction             -> warn only
+        # DS013  RUN cd used instead of WORKDIR        -> warn only
+        # DS006  COPY --from references earlier stage  -> informational

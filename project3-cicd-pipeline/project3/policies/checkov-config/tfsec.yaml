@@ -1,0 +1,30 @@
+###############################################################################
+# tfsec.yaml — tfsec Configuration
+#
+# tfsec is a second-opinion IaC scanner (Aqua Security, open source).
+# It runs alongside Checkov in terraform-check.yml.
+# Different rule sets mean the two tools catch different things.
+###############################################################################
+
+minimum_severity: MEDIUM
+
+exclude:
+  # aws-ec2-no-public-ip
+  # NAT Instance and Nginx EC2 need public IPs by design.
+  # They are the intentional entry points — public IPs are correct here.
+  - aws-ec2-no-public-ip
+
+  # aws-s3-enable-versioning — flow logs bucket, see checkov.yaml reasoning
+  - aws-s3-enable-versioning
+
+  # aws-s3-enable-logging — flow logs bucket recursive logging issue
+  - aws-s3-enable-logging
+
+  # aws-ec2-enable-at-rest-encryption — free-tier EBS, see checkov.yaml
+  - aws-ec2-enable-at-rest-encryption
+
+  # aws-iam-no-policy-wildcards
+  # The SSM managed policy (AmazonSSMManagedInstanceCore) uses wildcards.
+  # This is an AWS-managed policy — we cannot change it.
+  # PRODUCTION: Use a custom policy scoped to specific instance IDs.
+  - aws-iam-no-policy-wildcards
